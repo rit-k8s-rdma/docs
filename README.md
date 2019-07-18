@@ -10,19 +10,23 @@ pip install mkdocs
 ```
 
 ## Modifying and Viewing
-1. cd into documenation dir
+1. Startup mkdocs in serve mode
 ```
-cd rit-k8s-rdma
+mkdocs serve
 ```
-2. Startup mkdocs in serve mode
-```
-mkdocs server
-```
-3. Start editing files and it will update live
+2. Start editing files and it will update live
 
 ## Updating Site
 1. Run the mkdocs build command to update site
 ```
 mkdocs build
 ```
-2. Push your changes up the repo
+2. Copy site files to root directory
+```
+cp -R site/* .
+```
+3. Push your changes up the repo
+```
+git commit -am "Message"
+git push
+```
