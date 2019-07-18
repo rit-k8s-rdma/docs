@@ -27,6 +27,6 @@ cp -R site/* .
 ```
 3. Push your changes up the repo
 ```
-git commit -am "Message"
+git commit -m "Message"
 git push
 ```
