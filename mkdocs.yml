@@ -2,6 +2,9 @@ site_name: RIT k8s RDMA Documentation
 
 nav:
     - Home: index.md
-    - SRIOV: sriov.md
-    - About: about.md
+    - Introduction: introduction.md
+    - Components: components.md
+    - Install: install.md
+    - Helpful Commands and Tools: helpAndTools.md
+    - Glossary: glossary.md
 theme: readthedocs
