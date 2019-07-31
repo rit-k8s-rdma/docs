@@ -8,3 +8,8 @@ nav:
     - Helpful Commands and Tools: helpAndTools.md
     - Glossary: glossary.md
 theme: readthedocs
+
+markdown_extensions:
+    - toc:
+        permalink: True
+        separator: "_"

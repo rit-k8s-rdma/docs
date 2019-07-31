@@ -1,6 +1,6 @@
 # Welcome to `rit-k8s-rdma` docs
 
-intro paragraph about what this project does. Pluses and minuses of it.
+intro paragraph about what this project does. Pluses and minuses of it......
 
 ## Introduction
 Please see the [introduction page](introduction.md) for further details.
