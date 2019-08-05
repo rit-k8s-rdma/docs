@@ -7,25 +7,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
   
-  <link rel="shortcut icon" href="../img/favicon.ico">
+  
   <title>Components - RIT k8s RDMA Documentation</title>
+  
+
+  <link rel="shortcut icon" href="../img/favicon.ico">
+
+  
   <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
 
   <link rel="stylesheet" href="../css/theme.css" type="text/css" />
   <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
-  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+  <link rel="stylesheet" href="../css/highlight.css">
+
   
   <script>
     // Current page data
     var mkdocs_page_name = "Components";
     var mkdocs_page_input_path = "components.md";
-    var mkdocs_page_url = null;
+    var mkdocs_page_url = "/components/";
   </script>
   
-  <script src="../js/jquery-2.1.1.min.js" defer></script>
-  <script src="../js/modernizr-2.8.3.min.js" defer></script>
-  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
-  <script>hljs.initHighlightingOnLoad();</script> 
+  <script src="../js/jquery-2.1.1.min.js"></script>
+  <script src="../js/modernizr-2.8.3.min.js"></script>
+  <script type="text/javascript" src="../js/highlight.pack.js"></script>
+  <script src="../js/theme.js"></script> 
+
   
 </head>
 
@@ -39,62 +46,70 @@
         <a href=".." class="icon icon-home"> RIT k8s RDMA Documentation</a>
         <div role="search">
   <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+    <input type="text" name="q" placeholder="Search docs" />
   </form>
 </div>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-	<ul class="current">
-	  
+        <ul class="current">
           
-            <li class="toctree-l1">
-		
-    <a class="" href="..">Home</a>
-	    </li>
+            <li>
+    <li class="toctree-l1 ">
+        <a class="" href="..">Home</a>
+        
+    </li>
+<li>
           
-            <li class="toctree-l1">
-		
-    <a class="" href="../introduction/">Introduction</a>
-	    </li>
-          
-            <li class="toctree-l1 current">
-		
-    <a class="current" href="./">Components</a>
-    <ul class="subnav">
+            <li>
+    <li class="toctree-l1 current">
+        <a class="current" href="./">Components</a>
+        
+            <ul>
             
-    <li class="toctree-l2"><a href="#components">Components</a></li>
-    
-        <ul>
+                <li class="toctree-l3"><a href="#components">Components</a></li>
+                
+                    <li><a class="toctree-l4" href="#rdma_hardware_daemon_set">RDMA Hardware Daemon Set</a></li>
+                
+                    <li><a class="toctree-l4" href="#scheduler_extension">Scheduler Extension</a></li>
+                
+                    <li><a class="toctree-l4" href="#cni_plugin">CNI Plugin</a></li>
+                
+                    <li><a class="toctree-l4" href="#dummy_device_plugin">Dummy Device Plugin</a></li>
+                
+            
+            </ul>
         
-            <li><a class="toctree-l3" href="#rdma_hardware_daemon_set">RDMA Hardware Daemon Set</a></li>
-        
-            <li><a class="toctree-l3" href="#scheduler_extender">Scheduler Extender</a></li>
-        
-            <li><a class="toctree-l3" href="#cni">CNI</a></li>
-        
-            <li><a class="toctree-l3" href="#dummy_device_plugin">Dummy Device Plugin</a></li>
-        
-        </ul>
-    
-
-    </ul>
-	    </li>
+    </li>
+<li>
           
-            <li class="toctree-l1">
-		
-    <a class="" href="../install/">Install</a>
-	    </li>
+            <li>
+    <li class="toctree-l1 ">
+        <a class="" href="../glossary/">Glossary</a>
+        
+    </li>
+<li>
           
-            <li class="toctree-l1">
-		
-    <a class="" href="../helpAndTools/">Helpful Commands and Tools</a>
-	    </li>
+            <li>
+    <li class="toctree-l1 ">
+        <a class="" href="../helpAndTools/">helpAndTools</a>
+        
+    </li>
+<li>
           
-            <li class="toctree-l1">
-		
-    <a class="" href="../glossary/">Glossary</a>
-	    </li>
+            <li>
+    <li class="toctree-l1 ">
+        <a class="" href="../install/">Install</a>
+        
+    </li>
+<li>
+          
+            <li>
+    <li class="toctree-l1 ">
+        <a class="" href="../introduction/">Introduction</a>
+        
+    </li>
+<li>
           
         </ul>
       </div>
@@ -137,8 +152,29 @@
 <li>Server Container - the server container is an unprivileged container that scans through all available interfaces when starting up. It then makes a list of all interfaces that are SRIOV enabled and upon a RESTful get request from a user will return associated metadata about the container. The server container only scans the interfaces at startup because SRIOV devices can only change configurations upon a machine restart, which would rerun the init container and then the server container. The RESTful endpoint serves data in a JSON formatted list of PF's and each PF has an internal list of VF's, more info can be found <a href="https://github.com/rit-k8s-rdma/rit-k8s-rdma-ds">here</a>. The RESTful endpoint that the server container sets up is bound to the host network.</li>
 </ol>
 <p>Both the init container and the server container run under the same RDMA Hardware Daemon Set pod. When configuring how to install this pod please look at <a href="../install/#daemon_set_install_instructions">daemon set install instructions</a> for more detail.</p>
-<h2 id="scheduler_extender">Scheduler Extender<a class="headerlink" href="#scheduler_extender" title="Permanent link">&para;</a></h2>
-<h2 id="cni">CNI<a class="headerlink" href="#cni" title="Permanent link">&para;</a></h2>
+<h2 id="scheduler_extension">Scheduler Extension<a class="headerlink" href="#scheduler_extension" title="Permanent link">&para;</a></h2>
+<p>The scheduler extension is a software component that is responsible for ensuring that RDMA-enabled pods are deployed onto nodes with enough RDMA resources (bandwidth and virtual functions) to support them. The scheduler extension runs alongside the kube-scheduler process within a Kubernetes cluster, and listens for HTTP requests on a TCP port (8888 by default). The extension is then registered within the configuration file for kube-scheduler (see the <a href="../install/#scheduler_extension_install_instructions">install page</a> for details). Every time a new pod is being scheduled, kube-scheduler will make an HTTP request to the scheduler extenstion that contains the details of the new pod as well as a list of nodes within the cluster that kube-scheduler believe to be eligible to deploy the pod onto. The scheduler extension's job is to filter down that list based on whether the nodes in it have enough free RDMA VFs and bandwidth to support the pods requirements or not.</p>
+<p>In order to accomplish this, the scheduler extension contacts the RDMA hardware daemon set running on each of the potential nodes in the cluster to gather information about the current allocation of RDMA resources on that node. The requests to each daemon set are made in parallel, with a timeout for cases where a node's daemon set doesn't respond. Once the information has been gathered from a node, the scheduler extension calculates whether or not the node's interface and reserved bandwidth requirements can be met by the remaining resources on that node. If they can be, the node is added to a list of those that are elligible to deploy the pod onto. Once all of the nodes in the list passed in by kube-scheduler have been contacted or have timed out, this list is returned to kube-scheduler in an HTTP response. From here, kube-scheduler will limit its choice of where to place the new pod to one of the nodes in the returned list. If the returned list is empty, the pod will not be scheduled, and the output of <code>kubectl describe</code> for the pod will show the reasons given by the scheduler extension as to why the nodes in the list that was passed in were not eligible to host the pod.</p>
+<p>For help installing the scheduler extension and registering it with kube-scheduler, see the <a href="../install/#scheduler_extension_install_instructions">scheduler extension</a> section of the install page.</p>
+<p>More information about the Kubernetes API for scheduler extensions can be found on the Kubernetes <a href="https://kubernetes.io/docs/concepts/extend-kubernetes/extend-cluster/#scheduler-extensions">website</a> and <a href="https://github.com/kubernetes/community/blob/master/contributors/design-proposals/scheduling/scheduler_extender.md">github</a>.</p>
+<h2 id="cni_plugin">CNI Plugin<a class="headerlink" href="#cni_plugin" title="Permanent link">&para;</a></h2>
+<p>The container network interface, or CNI, is a specification that governs the way network access is provided to containers and containerized applications. Kubernetes utilizes CNI as its standard for allocating IP addresses and network interfaces to pods that have been deployed in a cluster. A CNI plugin is a piece of software that performs that allocation, along with any other additional setup. Since RDMA network interfaces require specific additional setup to configure bandwidth limits and reservations, as well as to select virtual functions such that a pod's bandwidth requirements are satisfied, a CNI plugin is necessary for handling RDMA-enabled pods.</p>
+<p>The CNI plugin developed for this project is a fork of the existing <a href="https://github.com/Mellanox/sriov-cni">Mellanox CNI plugin</a>, which was limited in the fact that it always allocated one interface to each pod and didn't support bandwidth reservation or limitation. The CNI plugin for this project improves upon this by adding support for an arbitrary number of RDMA interfaces per pod, including the ability to allocate no RDMA interfaces to pods that do not need any.</p>
+<p>The CNI plugin is executed each time a pod is created or destroyed. It runs only once per pod for each of these actions, and must allocate or deallocate all of the interfaces for a pod at one time. This is done by executing an algorithm that finds a mapping of requested pod interfaces onto virtual functions that allows a pod's requirements to be satisfied. This is similar to one of the steps performed by the scheduler extension, though the scheduler extension need only determine whether a pod's requirements can be satisfied by a node, rather than what the exact final allocation of VFs to that pod will be to satisfy it.</p>
+<p>The tasks performed by the CNI plugin during pod setup are the following:</p>
+<ol>
+<li>Determine a placement of RDMA virtual functions that will satisfy the pod's requirements.</li>
+<li>Move each of the needed virtual functions into the pod's network namespace.</li>
+<li>Rename each of the virtual functions that have been added to the pod's network namespace.</li>
+<li>Set the bandwidth limits and reservations on each RDMA VF, if necessary.</li>
+<li>Allocate IP addresses to each of the VFs that have been allocated to the pod.</li>
+</ol>
+<p>The tasks performed by the CNI plugin during pod teardown are the following:</p>
+<ol>
+<li>Rename each of the virtual functions in the pod's network namespace.</li>
+<li>Move each of the virtual functions from the pod's network namespace back to the host's network namespace.</li>
+<li>Remove any bandwidth reservations or limitations set on the deallocated virtual functions.</li>
+</ol>
 <h2 id="dummy_device_plugin">Dummy Device Plugin<a class="headerlink" href="#dummy_device_plugin" title="Permanent link">&para;</a></h2>
 <p>The Dummy Device Plugin is a stop gap measure for the current system. The directory <code>/dev/infiniband</code> is needed within any pod that requires RDMA. In order to access devices in this directory a container either needs to be run in privileged mode or a <a href="https://kubernetes.io/docas/concepts/extend-kubernetes/compute-storage-net/device-plugins/">Device Plugin</a> can return a directory that a container will have privileged access to. For obvious reasons we opted to create a Device Plugin for the sole purpose that it will give <strong>any container</strong> that requests an RDMA device the proper access to <code>/dev/infiniband</code>. This Dummy Device Plugin does not act like any other Device Plugin where it is meant to manage a specialized resources; that is done by the RDMA Hardware Daemon Set, Scheduler Extender, and CNI components. When configuring how to install this pod please look at <a href="../install/#dummy_device_plugin_installation">dummy device plugin installation</a> for more detail.</p>
               
@@ -148,10 +184,10 @@
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="../install/" class="btn btn-neutral float-right" title="Install">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../glossary/" class="btn btn-neutral float-right" title="Glossary">Next <span class="icon icon-circle-arrow-right"></span></a>
       
       
-        <a href="../introduction/" class="btn btn-neutral" title="Introduction"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href=".." class="btn btn-neutral" title="Home"><span class="icon icon-circle-arrow-left"></span> Previous</a>
       
     </div>
   
@@ -165,7 +201,7 @@
 
   Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
 </footer>
-      
+	  
         </div>
       </div>
 
@@ -173,20 +209,17 @@
 
   </div>
 
-  <div class="rst-versions" role="note" style="cursor: pointer">
+<div class="rst-versions" role="note" style="cursor: pointer">
     <span class="rst-current-version" data-toggle="rst-current-version">
       
       
-        <span><a href="../introduction/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+        <span><a href=".." style="color: #fcfcfc;">&laquo; Previous</a></span>
       
       
-        <span style="margin-left: 15px"><a href="../install/" style="color: #fcfcfc">Next &raquo;</a></span>
+        <span style="margin-left: 15px"><a href="../glossary/" style="color: #fcfcfc">Next &raquo;</a></span>
       
     </span>
 </div>
-    <script>var base_url = '..';</script>
-    <script src="../js/theme.js" defer></script>
-      <script src="../search/main.js" defer></script>
 
 </body>
 </html>
