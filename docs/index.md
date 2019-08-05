@@ -1,18 +1,22 @@
 # Welcome to `rit-k8s-rdma` docs
 
-intro paragraph about what this project does. Pluses and minuses of it......
+This project aims to develop software components that allows the use of RDMA
+from within containers managed by Kubernetes. It differs from the previous
+projects it builds off of by allowing for more fine grained control over
+various aspects of the system, including the ability to set bandwidth limits
+and reserve bandwidth for specific Kubernetes pods.
 
 ## Introduction
-Please see the [introduction page](introduction.md) for further details.
+For a overview of the system, its design, and the problem it solves, see the [introduction page](introduction.md).
 
 ## Components
-Please see the [components page](components.md) for further details.
+For a description of each of the software components that are part of the project, see the [components page](components.md).
 
 ## Install
-Please see the [install page](install.md) for further details.
+For an installation guide, see the [install page](install.md).
 
 ## Helpful Commands and Tools
-Please see the [helpful commands and tools page](helpAndTools.md) for further details.
+A list of useful tools and commands outside of this project is available on the [helpful commands and tools page](helpAndTools.md).
 
 ## Glossary
-Please see the [glossary page](glossary.md) for further details.
+For definitions of terms and acronyms, see the [glossary page](glossary.md).
