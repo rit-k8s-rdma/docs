@@ -21,7 +21,28 @@ For help installing the scheduler extension and registering it with kube-schedul
 
 More information about the Kubernetes API for scheduler extensions can be found on the Kubernetes [website](https://kubernetes.io/docs/concepts/extend-kubernetes/extend-cluster/#scheduler-extensions) and [github](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/scheduling/scheduler_extender.md).
 
-## CNI
+## CNI Plugin
+
+The container network interface, or CNI, is a specification that governs the way network access is provided to containers and containerized applications. Kubernetes utilizes CNI as its standard for allocating IP addresses and network interfaces to pods that have been deployed in a cluster. A CNI plugin is a piece of software that performs that allocation, along with any other additional setup. Since RDMA network interfaces require specific additional setup to configure bandwidth limits and reservations, as well as to select virtual functions such that a pod's bandwidth requirements are satisfied, a CNI plugin is necessary for handling RDMA-enabled pods.
+
+The CNI plugin developed for this project is a fork of the existing [Mellanox CNI plugin](https://github.com/Mellanox/sriov-cni), which was limited in the fact that it always allocated one interface to each pod and didn't support bandwidth reservation or limitation. The CNI plugin for this project improves upon this by adding support for an arbitrary number of RDMA interfaces per pod, including the ability to allocate no RDMA interfaces to pods that do not need any.
+
+The CNI plugin is executed each time a pod is created or destroyed. It runs only once per pod for each of these actions, and must allocate or deallocate all of the interfaces for a pod at one time. This is done by executing an algorithm that finds a mapping of requested pod interfaces onto virtual functions that allows a pod's requirements to be satisfied. This is similar to one of the steps performed by the scheduler extension, though the scheduler extension need only determine whether a pod's requirements can be satisfied by a node, rather than what the exact final allocation of VFs to that pod will be to satisfy it.
+
+The tasks performed by the CNI plugin during pod setup are the following:
+
+ 1. Determine a placement of RDMA virtual functions that will satisfy the pod's requirements.
+ 2. Move each of the needed virtual functions into the pod's network namespace.
+ 3. Rename each of the virtual functions that have been added to the pod's network namespace.
+ 4. Set the bandwidth limits and reservations on each RDMA VF, if necessary.
+ 5. Allocate IP addresses to each of the VFs that have been allocated to the pod.
+
+The tasks performed by the CNI plugin during pod teardown are the following:
+
+ 1. Rename each of the virtual functions in the pod's network namespace.
+ 2. Move each of the virtual functions from the pod's network namespace back to the host's network namespace.
+ 3. Remove any bandwidth reservations or limitations set on the deallocated virtual functions.
+
 
 ## Dummy Device Plugin
 The Dummy Device Plugin is a stop gap measure for the current system. The directory `/dev/infiniband` is needed within any pod that requires RDMA. In order to access devices in this directory a container either needs to be run in privileged mode or a [Device Plugin](https://kubernetes.io/docas/concepts/extend-kubernetes/compute-storage-net/device-plugins/) can return a directory that a container will have privileged access to. For obvious reasons we opted to create a Device Plugin for the sole purpose that it will give **any container** that requests an RDMA device the proper access to `/dev/infiniband`. This Dummy Device Plugin does not act like any other Device Plugin where it is meant to manage a specialized resources; that is done by the RDMA Hardware Daemon Set, Scheduler Extender, and CNI components. When configuring how to install this pod please look at [dummy device plugin installation](install.md#dummy_device_plugin_installation) for more detail.
