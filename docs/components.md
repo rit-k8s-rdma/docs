@@ -11,7 +11,15 @@ The RDMA Harware Daemon Set is a [Kubernetes Daemon Set](https://kubernetes.io/d
 Both the init container and the server container run under the same RDMA Hardware Daemon Set pod. When configuring how to install this pod please look at [daemon set install instructions](install.md#daemon_set_install_instructions) for more detail.
 
 
-## Scheduler Extender
+## Scheduler Extension
+
+The scheduler extension is a software component that is responsible for ensuring that RDMA-enabled pods are deployed onto nodes with enough RDMA resources (bandwidth and virtual functions) to support them. The scheduler extension runs alongside the kube-scheduler process within a Kubernetes cluster, and listens for HTTP requests on a TCP port (8888 by default). The extension is then registered within the configuration file for kube-scheduler (see the [install page](install.md#scheduler_extension_install_instructions) for details). Every time a new pod is being scheduled, kube-scheduler will make an HTTP request to the scheduler extenstion that contains the details of the new pod as well as a list of nodes within the cluster that kube-scheduler believe to be eligible to deploy the pod onto. The scheduler extension's job is to filter down that list based on whether the nodes in it have enough free RDMA VFs and bandwidth to support the pods requirements or not.
+
+In order to accomplish this, the scheduler extension contacts the RDMA hardware daemon set running on each of the potential nodes in the cluster to gather information about the current allocation of RDMA resources on that node. The requests to each daemon set are made in parallel, with a timeout for cases where a node's daemon set doesn't respond. Once the information has been gathered from a node, the scheduler extension calculates whether or not the node's interface and reserved bandwidth requirements can be met by the remaining resources on that node. If they can be, the node is added to a list of those that are elligible to deploy the pod onto. Once all of the nodes in the list passed in by kube-scheduler have been contacted or have timed out, this list is returned to kube-scheduler in an HTTP response. From here, kube-scheduler will limit its choice of where to place the new pod to one of the nodes in the returned list. If the returned list is empty, the pod will not be scheduled, and the output of `kubectl describe` for the pod will show the reasons given by the scheduler extension as to why the nodes in the list that was passed in were not eligible to host the pod.
+
+For help installing the scheduler extension and registering it with kube-scheduler, see the [scheduler extension](install.md#scheduler_extension_install_instructions) section of the install page.
+
+More information about the Kubernetes API for scheduler extensions can be found on the Kubernetes [website](https://kubernetes.io/docs/concepts/extend-kubernetes/extend-cluster/#scheduler-extensions) and [github](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/scheduling/scheduler_extender.md).
 
 ## CNI
 
