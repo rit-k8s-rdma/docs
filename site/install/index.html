@@ -90,6 +90,22 @@
             
                 <li class="toctree-l3"><a href="#install">Install</a></li>
                 
+                    <li><a class="toctree-l4" href="#prerequisites">Prerequisites</a></li>
+                
+                    <li><a class="toctree-l4" href="#hardware_setup">Hardware Setup</a></li>
+                
+                    <li><a class="toctree-l4" href="#rdma_hardware_daemon_set">RDMA Hardware Daemon Set</a></li>
+                
+                    <li><a class="toctree-l4" href="#scheduler_extension">Scheduler Extension</a></li>
+                
+                    <li><a class="toctree-l4" href="#cni_plugin">CNI Plugin</a></li>
+                
+                    <li><a class="toctree-l4" href="#dummy_device_plugin">Dummy Device Plugin</a></li>
+                
+                    <li><a class="toctree-l4" href="#pod_yaml_changes">Pod YAML Changes</a></li>
+                
+                    <li><a class="toctree-l4" href="#testing_and_verification">Testing and Verification</a></li>
+                
             
             </ul>
         
@@ -136,7 +152,335 @@
             <div class="section">
               
                 <h1 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h1>
-<p>install stuff...</p>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<p>Before installing this system, you should have a working Kubernetes cluster set up. The following prerequisites must be met:
+ - Kubernetes version 1.13
+ - Golang version 1.12
+   - Version 1.12 or greater is necessary to compile the software components of the system.
+ - Mellanox OFED version 4.6-1.0.1.1 or greater
+   - The firmware on Mellanox RDMA cards should be updated to the latest available version.</p>
+<h2 id="hardware_setup">Hardware Setup<a class="headerlink" href="#hardware_setup" title="Permanent link">&para;</a></h2>
+<p>This section covers the configuration of Mellanox RDMA hardware in preparation for using SR-IOV.</p>
+<ol>
+<li>Enable SR-IOV in the BIOS of an machine with RDMA hardware installed.</li>
+<li>
+<p>Load the Mellanox driver modules for making configuration changes to the RDMA hardware.</p>
+<p>Run:</p>
+<pre><code>sudo mst start
+</code></pre>
+<p>You should expect to see output similar to the following:</p>
+<pre><code>Starting MST (Mellanox Software Tools) driver set
+Loading MST PCI module - Success
+Loading MST PCI configuration module - Success
+Create devices
+Unloading MST PCI module (unused) - Success
+</code></pre>
+</li>
+<li>
+<p>Determine the path to the PCI device for the RDMA hardware card.</p>
+<p>Run:</p>
+<pre><code>sudo mst status
+</code></pre>
+<p>You should expect to see output similar to the following:</p>
+<pre><code>MST modules:
+------------
+    MST PCI module is not loaded
+    MST PCI configuration module loaded
+
+MST devices:
+------------
+/dev/mst/mt4119_pciconf0         - PCI configuration cycles access.
+                                   domain:bus:dev.fn=0000:04:00.0 addr.reg=88 data.reg=92
+                                   Chip revision is: 00
+</code></pre>
+<p>The /dev/mst/ path is the path to the device:</p>
+<pre><code>/dev/mst/mt4119_pciconf0
+</code></pre>
+</li>
+<li>
+<p>Query the status of the device to determine whether SR-IOV is enabled, and how many virtual functions are configured.</p>
+<p>Run:</p>
+<pre><code>mlxconfig -d &lt;pci_device_path&gt; q
+</code></pre>
+<p>Here, &lt;pci_device_path> is the path to the PCI device determined in the previous step. Ex:</p>
+<pre><code>/dev/mst/mt4119_pciconf0
+</code></pre>
+<p>You should expect to see output similar to the following:</p>
+<pre><code>Device #1:
+----------
+
+Device type:    ConnectX5       
+Name:           MCX556A-ECA_Ax  
+Description:    ConnectX-5 VPI adapter card; EDR IB (100Gb/s) and 100GbE; dual-port QSFP28; PCIe3.0 x16; tall bracket; ROHS R6
+Device:         /dev/mst/mt4119_pciconf0
+
+Configurations:                              Next Boot
+         MEMIC_BAR_SIZE                      0               
+         MEMIC_SIZE_LIMIT                    _256KB(1)       
+         HOST_CHAINING_MODE                  DISABLED(0)
+         ...
+         NUM_OF_VFS                          120
+         ...
+         SRIOV_EN                            True(1)
+         ...
+</code></pre>
+<p>The lines of interest to us are:</p>
+<pre><code>SRIOV_EN                            True(1)
+</code></pre>
+<p>Which indicates whether or not SR-IOV has been enabled on the RDMA card.</p>
+<p>And:</p>
+<pre><code>NUM_OF_VFS                          120
+</code></pre>
+<p>Which indicates how many SR-IOV virtual functions have been configured on the card.</p>
+<p>We want to ensure that SR-IOV is enabled, and the number of virtual functions is configured to the largest amount the card will support.</p>
+</li>
+<li>
+<p>Enable SR-IOV and confuigure number of VFs.</p>
+<p>Run:</p>
+<pre><code>mlxconfig -d &lt;pci_device_path&gt; set SRIOV_EN=1 NUM_OF_VFS=&lt;max_num_vfs&gt;
+</code></pre>
+<p>Here, &lt;pci_device_path> is the path determined in step 3, and &lt;max_num_vfs> is the highest number of virtual functions that the RDMA hardware card supports. This can be found in the documentation for that card (this can typically be found in the firmware manual).</p>
+<p>For example:</p>
+<pre><code>mlxconfig -d /dev/mst/mt4119_pciconf0 set SRIOV_EN=1 NUM_OF_VFS=120
+</code></pre>
+<p>Choose 'yes' when asked whether to apply the configuration.</p>
+</li>
+<li>
+<p>Reboot the machine.</p>
+</li>
+<li>
+<p>Verify that the modification worked correctly.</p>
+<p>Run:</p>
+<pre><code>sudo mst start
+sudo mst status
+mlxconfig -d &lt;pci_device_path&gt; q | egrep 'NUM_OF_VFS|SRIOV_EN'
+</code></pre>
+<p>Ensure that the output of the last command matches the changes you have made prior to rebooting.</p>
+</li>
+</ol>
+<h2 id="rdma_hardware_daemon_set">RDMA Hardware Daemon Set<a class="headerlink" href="#rdma_hardware_daemon_set" title="Permanent link">&para;</a></h2>
+<p>This section covers the installation of the RDMA Hardware Daemon Set onto all of the worker nodes in the Kubernetes cluster.</p>
+<ol>
+<li>
+<p>Use Kubernetes to deploy the Daemon Set to all the nodes in the cluster.</p>
+<p>On the master node of the Kubernetes cluster, run:</p>
+<pre><code>kubectl apply -f &lt;rdma_daemonset_yaml&gt;
+</code></pre>
+<p>Where &lt;rdma_daemonset_yaml> is a YAML file that specifies the details of the Daemon Set. This file can be found at:</p>
+<pre><code>https://github.com/rit-k8s-rdma/rit-k8s-rdma-ds/blob/master/rdma-ds.yaml
+</code></pre>
+<p>Applying this Daemon Set configuration on the Kubernetes cluster will cause each worker node to pull container images built as part of this project from our <a href="https://hub.docker.com/u/ritk8srdma">Docker Hub repository</a>.</p>
+</li>
+</ol>
+<p>If you would like to build this Docker image yourself, the instructions are available within the <a href="https://github.com/rit-k8s-rdma/rit-k8s-rdma-ds">RDMA Hardware Daemon Set repository</a>.</p>
+<ol>
+<li>
+<p>Verify that the RDMA Hardware Daemon Set is running on each worker node in the cluster.</p>
+<p>On the master node of the Kubernetes cluster, run:</p>
+<pre><code>kubectl get pods -o wide --namespace kube-system
+</code></pre>
+<p>Within the output for this command, you should see several lines with the name: <code>rdma-ds-*</code> (one for each worker node in the cluster). The <code>status</code> column of each of these pods will show <code>Init:0/1</code> while the pod is performing hardware enumeration and initialization of the SR-IOV enabled RDMA hardware. One this has completed (it may take several minutes if there are a large number of virtual functions configured on a host), the status of the pods should switch to <code>Running</code>.</p>
+</li>
+</ol>
+<h2 id="scheduler_extension">Scheduler Extension<a class="headerlink" href="#scheduler_extension" title="Permanent link">&para;</a></h2>
+<p>This section covers the installation of the Scheduler Extension component.</p>
+<ol>
+<li>
+<p>Install and run the scheduler extension Docker container on the master node of the Kubernetes cluster.</p>
+<p>Run</p>
+<pre><code>docker run -d --rm --name ritk8srdma-scheduler-entension --network host ritk8srdma/rit-k8s-rdma-scheduler-extender
+</code></pre>
+<p>This will pull the Docker image for the scheduler extension from our Docker Hub repository and run it.</p>
+<p>If you would like to build the scheduler extension docker image yourself, the instructions are available within the <a href="https://github.com/rit-k8s-rdma/rit-k8s-rdma-scheduler-extender">scheduler extension repository</a>.</p>
+</li>
+<li>
+<p>Modify the configuration of the core Kubernetes scheduler to register the scheduler extension.</p>
+<p>On the master node of the Kubernetes cluster, edit or add the file /etc/kubernetes/scheduler-policy-config.json to register the scheduler extension. The following entry should be added to the 'extenders' list within that file:</p>
+<pre><code>{
+    "urlPrefix": "http://127.0.0.1:8888/scheduler",
+    "filterVerb": "rdma_scheduling",
+    "bindVerb": "",
+    "enableHttps": false,
+    "nodeCacheCapable": false,
+    "ignorable": false
+}
+</code></pre>
+<p>Here, the IP address/port combination of 127.0.0.1 and 8888 is used because the scheduler extension is running on the same node as the core Kubernetes scheduler (the master node of the Kubernetes cluster), and listening on port 8888. If the extension is run elsewhere or listening on a different port, the 'urlPrefix' parameter should be editted accordingly.</p>
+<p>An example version of this file is available in the <a href="https://github.com/rit-k8s-rdma/rit-k8s-rdma-scheduler-extender/blob/master/kube_scheduler_config_files/scheduler-policy-config.json">scheduler extension repository</a>.</p>
+</li>
+<li>
+<p>Ensure the core Kubernetes scheduler is using the configuration file where the scheduler extension is registered.</p>
+<p>Edit the file /etc/kubernetes/manifests/kube-scheduler.yaml on the master node of the Kubernetes cluster. Add the following volume to the pod definition if it does not exist (place the definition within the existing 'volumes' section if one exists):</p>
+<pre><code>volumes:
+- hostPath:
+    path: /etc/kubernetes/scheduler-policy-config.json
+    type: FileOrCreate
+  name: scheduler-policy-config
+</code></pre>
+<p>Add the following directive to the command to be run in the kube-scheduler container:</p>
+<pre><code>--policy-config-file=/etc/kubernetes/scheduler-policy-config.json
+</code></pre>
+<p>Overall, the whole file should look like:</p>
+<pre><code>apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    scheduler.alpha.kubernetes.io/critical-pod: ""
+  creationTimestamp: null
+  labels:
+    component: kube-scheduler
+    tier: control-plane
+  name: kube-scheduler
+  namespace: kube-system
+spec:
+  containers:
+  - command:
+    - kube-scheduler
+    - --address=127.0.0.1
+    - --kubeconfig=/etc/kubernetes/scheduler.conf
+    - --policy-config-file=/etc/kubernetes/scheduler-policy-config.json
+    - --leader-elect=true
+    image: k8s.gcr.io/kube-scheduler:v1.13.5
+    imagePullPolicy: IfNotPresent
+    livenessProbe:
+      failureThreshold: 8
+      httpGet:
+        host: 127.0.0.1
+        path: /healthz
+        port: 10251
+        scheme: HTTP
+      initialDelaySeconds: 15
+      timeoutSeconds: 15
+    name: kube-scheduler
+    resources:
+      requests:
+        cpu: 100m
+    volumeMounts:
+    - mountPath: /etc/kubernetes/scheduler.conf
+      name: kubeconfig
+      readOnly: true
+    - mountPath: /etc/kubernetes/scheduler-policy-config.json
+      name: scheduler-policy-config
+      readOnly: true
+  hostNetwork: true
+  priorityClassName: system-cluster-critical
+  volumes:
+  - hostPath:
+      path: /etc/kubernetes/scheduler.conf
+      type: FileOrCreate
+    name: kubeconfig
+  - hostPath:
+      path: /etc/kubernetes/scheduler-policy-config.json
+      type: FileOrCreate
+    name: scheduler-policy-config
+status: {}
+</code></pre>
+</li>
+<li>
+<p>Ensure that the scheduler extension has started up correctly.</p>
+<p>Run <code>docker logs ritk8srdma-scheduler-entension</code> on the node where the scheduler extension is running. The output should include the following line at the top of its output:</p>
+<pre><code>YYYY/MM/DD HH:MM:SS RDMA scheduler extender listening on port:  &lt;port_number&gt;
+</code></pre>
+<p>This command can be run whenever necessary to view the logging output from the scheduler extension.</p>
+</li>
+</ol>
+<h2 id="cni_plugin">CNI Plugin<a class="headerlink" href="#cni_plugin" title="Permanent link">&para;</a></h2>
+<p>This section covers the installation of the CNI plugin on each RDMA-enabled worker node in the Kubernetes cluster.</p>
+<ol>
+<li>
+<p>Install the CNI plugin executable.</p>
+<p>Copy the 'rit-k8s-rdma-cni-linux-amd64' executable from <a href="https://github.com/rit-k8s-rdma/rit-k8s-rdma-sriov-cni/releases">the releases page of the repository</a>. Place it in /opt/cni/bin/ on each RDMA-enabled worker node in the Kubernetes cluster.</p>
+</li>
+<li>
+<p>Install the CNI plugin configuration file.</p>
+<p>Copy the file '10-ritk8srdma-cni.conf' from <a href="https://github.com/rit-k8s-rdma/rit-k8s-rdma-sriov-cni/releases">the releases page of the repository</a>. Place it in /etc/cni/net.d/ on each RDMA-enabled worker node in the Kubernetes cluster. This configuration file can be edited to fit the needs of your environment. Ensure that this file is the first one (lexicographically) within that directory. Kubernetes always uses the CNI configuration that comes first lexicographically within this directory.</p>
+<p>Within this file, the 'type' parameter specifies the name of the CNI executable that will be run when a pod is deployed. This name should match the name of the executable installed during step 1.</p>
+</li>
+</ol>
+<p>To compile the CNI plugin binary yourself, checkout the <a href="https://github.com/rit-k8s-rdma/rit-k8s-rdma-sriov-cni">CNI repository</a>. Enter the 'sriov' directory within the checked-out copy of the repository, then run <code>go install</code>. The binary should then be created in the appropriate Golang bin directory.</p>
+<h2 id="dummy_device_plugin">Dummy Device Plugin<a class="headerlink" href="#dummy_device_plugin" title="Permanent link">&para;</a></h2>
+<p>This section covers the installation of the Dummy Device Plugin onto all of the worker nodes in the Kubernetes cluster.</p>
+<ol>
+<li>
+<p>Use Kubernetes to deploy the dummy device plugin to all the nodes in the cluster.</p>
+<p>On the master node of the Kubernetes cluster, run:</p>
+<pre><code>kubectl apply -f &lt;dummy_plugin_yaml&gt;
+</code></pre>
+<p>Where &lt;dummy_plugin_yaml> is a YAML file that specifies the details of the Dummy Device Plugin. This file can be found at:</p>
+<pre><code>https://github.com/rit-k8s-rdma/rit-k8s-rdma-dummy-device-plugin/blob/master/rdma-dummy-dp-ds.yaml
+</code></pre>
+<p>Applying this configuration on the Kubernetes cluster will cause each worker node to pull container images built as part of this project from our <a href="https://hub.docker.com/u/ritk8srdma">Docker Hub repository</a>. These images contain the files necessary to run the Dummy Device Plugin.</p>
+<p>If you would like to build the Dummy Device Plugin Docker image yourself, the instructions are available within the <a href="https://github.com/rit-k8s-rdma/rit-k8s-rdma-dummy-device-plugin">Dummy Device Plugin repository</a>.</p>
+</li>
+<li>
+<p>Verify that the Dummy Device Plugin is running on each worker node in the cluster.</p>
+<p>On the master node of the Kubernetes cluster, run:</p>
+<pre><code>kubectl get pods -o wide --namespace kube-system
+</code></pre>
+<p>Within the output for this command, you should see several lines with the name: <code>rdma-dummy-dp-ds-*</code> (one for each worker node in the cluster). The <code>status</code> column of each of these pods should show <code>Running</code>.</p>
+</li>
+</ol>
+<h2 id="pod_yaml_changes">Pod YAML Changes<a class="headerlink" href="#pod_yaml_changes" title="Permanent link">&para;</a></h2>
+<pre><code>To take advantage of RDMA within a Kubernetes pod, that pod's definition (YAML file) will need to be updated to specify the RDMA interfaces that it requires. This involves the following steps:
+</code></pre>
+<ol>
+<li>
+<p>Add the <code>rdma_interfaces_required</code> directive to the pod's metadata annotations:</p>
+<pre><code>apiVersion: v1
+kind: Pod
+metadata:
+  name: pod1
+  annotations:
+    rdma_interfaces_required: '[
+        {"min_tx_rate": 15000, "max_tx_rate": 20000},
+        {"min_tx_rate": 5000},
+        {}
+    ]'
+spec:
+...
+</code></pre>
+<p>The value of this annotation should be a JSON-formatted string that contains a list of RDMA interfaces needed by the pod, as well as the bandwidth limitations and reservations for each of those interfaces. In this case <code>min_tx_rate</code> specifies an amount of bandwidth that should be reserved for the pod to use exclusively through a specific RDMA interface, while <code>max_tx_rate</code> sets a cap on the amount of bandwidth that can used by a pod through an interface. Either or both of these properties can be omitted if you do not need a bandwidth cap/reservation. In the example above, three RDMA interfaces are requested by a pod: the first sets both properties, the second has only a bandwidth reservation, and the third has no limit nor any reserved bandwidth. The numbers used are in units of megabits of bandwidth per second (Mb/S).</p>
+</li>
+<li>
+<p>Add a request for a <code>/dev/infiniband/</code> mount to each container that will need access to RDMA interfaces:</p>
+<pre><code>...
+  containers:
+  - image: mellanoxubuntudocker:latest
+    name: mofed-test-ctr1
+    resources:
+      limits:
+        rdma-sriov/dev-infiniband-mount: 1
+...
+</code></pre>
+<p>The line <code>rdma-sriov/dev-infiniband-mount: 1</code> indicates that the container requires privleged access to the <code>/dev/infiniband</code> directory. The quantity specified should be 1 (technically, the dummy device plugin is advertising an infinite amount of this resource type, but only one is needed to provide the mount point to the container).</p>
+</li>
+<li>
+<p>Make sure the container images being deployed in the pod contain the necessary RDMA libraries. This can be done by utilizing Mellanox's 'mellanoxubuntudocker:latest' Docker container image (and/or using this as a base to build other containers).</p>
+</li>
+</ol>
+<p>An example of a complete pod configuration file is available from our <a href="https://github.com/rit-k8s-rdma/rit-k8s-rdma-common/blob/master/example-pod-config.yml">common repository</a>.</p>
+<h2 id="testing_and_verification">Testing and Verification<a class="headerlink" href="#testing_and_verification" title="Permanent link">&para;</a></h2>
+<h3 id="deploy_a_pod">Deploy a Pod<a class="headerlink" href="#deploy_a_pod" title="Permanent link">&para;</a></h3>
+<pre><code>-deploy pod
+-kubectl get pods
+-if status != running:
+    -kubectl describe pod
+        -possible errors:
+            -scheduler extension not running/found
+                -see logs for kube-scheduler &amp; scheduler extension itself
+            -pod's rdma_interfaces_required JSON is malformatted
+                -fix it
+            -nodes in cluster did not respond to scheduler extension's requests
+                -see scheduler extension's logs
+                -make sure scheduler extension is contacting DaemonSet on same port daemonset is listening
+                -use web browser/curl to make sure daemonset is working
+            -nodes in cluster did not have enough free bandwidth
+                -check response from daemonset using curl/browser
+                -check how much bandwidth/how many interfaces the pod is requesting
+</code></pre>
+<h3 id="test_connectivity_between_two_pods">Test connectivity between two pods<a class="headerlink" href="#test_connectivity_between_two_pods" title="Permanent link">&para;</a></h3>
+<pre><code>-have two pods w/ node selectors and run ib_send_bw between them
+</code></pre>
               
             </div>
           </div>
