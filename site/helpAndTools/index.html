@@ -75,6 +75,16 @@
             
     <li class="toctree-l2"><a href="#helpful_commands_and_tools">Helpful Commands and Tools</a></li>
     
+        <ul>
+        
+            <li><a class="toctree-l3" href="#kubernetes_commands">Kubernetes Commands</a></li>
+        
+            <li><a class="toctree-l3" href="#errors">Errors</a></li>
+        
+            <li><a class="toctree-l3" href="#repositories_and_guides">Repositories and Guides</a></li>
+        
+        </ul>
+    
 
     </ul>
 	    </li>
@@ -117,6 +127,211 @@
             <div class="section">
               
                 <h1 id="helpful_commands_and_tools">Helpful Commands and Tools<a class="headerlink" href="#helpful_commands_and_tools" title="Permanent link">&para;</a></h1>
+<p>Here are some helpful commands and some repositories of where to find information that we found helpful.</p>
+<h2 id="kubernetes_commands">Kubernetes Commands<a class="headerlink" href="#kubernetes_commands" title="Permanent link">&para;</a></h2>
+<p>Get nodes:</p>
+<pre><code>kubectl get nodes
+</code></pre>
+
+<p>Get pods:</p>
+<pre><code>kubectl get pods -o wide
+</code></pre>
+
+<p>Get pods in namespace:</p>
+<pre><code>kubectl get pods -o wide --namespace=kube-system
+</code></pre>
+
+<p>Delete all pods, services, and anything else:</p>
+<pre><code>kubectl delete daemonsets,replicasets,services,deployments,pods,rc --all
+</code></pre>
+
+<p>To reset the master node
+<em>NOTE</em> must reset up all of the clients for kubernetes:</p>
+<pre><code>sudo kubeadm reset
+</code></pre>
+
+<p>Delete config map if already exists:</p>
+<pre><code>kubectl delete configmap &lt;config-map-name&gt; -n kube-system
+</code></pre>
+
+<p>Delete DameonSet Extension (the DaemeonSet extension is the pod that runs the Mellanox RDMA plugin)</p>
+<pre><code>kubectl delete ds --namespace kube-system &lt;dameon-set-name&gt;
+</code></pre>
+
+<p>Deleting a kubernetes pod</p>
+<pre><code>kubectl delete pod &lt;pod-name&gt;
+</code></pre>
+
+<p><pod-name> is the name that shows up when you do "kubectl get pods"</p>
+<h3 id="interface_on_rdma_nodes">Interface on RDMA Nodes<a class="headerlink" href="#interface_on_rdma_nodes" title="Permanent link">&para;</a></h3>
+<p>Assign IP to a specific interface:</p>
+<pre><code>sudo ifconfig  &lt;interface-name&gt; &lt;ip&gt;
+</code></pre>
+
+<p>Bring interface up:</p>
+<pre><code>sudo ifconfig &lt;interface-name&gt; up
+</code></pre>
+
+<p>Getting VF information:</p>
+<pre><code>/opt/mellanox/iproute2/sbin/ip link show &lt;interface&gt;
+</code></pre>
+
+<h4 id="changing_the_number_vfs">Changing the number VFs<a class="headerlink" href="#changing_the_number_vfs" title="Permanent link">&para;</a></h4>
+<p>To change the VFs on RDMA node first run the following command in order to configure the Mellanox NIC:</p>
+<pre><code>sudo mst start
+</code></pre>
+
+<p>To enable SRIOV and change the number of VFs type in:</p>
+<pre><code>sudo mlxconfig -d /dev/mst/&lt;mellanox-switch&gt; set SRIOV_EN=1 NUM_OF_VFS=120
+</code></pre>
+
+<p>Then restart the machine with a friendly message:</p>
+<pre><code>sudo shutdown -r now 'Updating Mellanox Config'
+</code></pre>
+
+<h4 id="finding_info_about_mellanox_nic">Finding info about Mellanox NIC<a class="headerlink" href="#finding_info_about_mellanox_nic" title="Permanent link">&para;</a></h4>
+<p>Start the Mellanox device:</p>
+<pre><code>sudo mst start
+</code></pre>
+
+<p>List information about the driver:</p>
+<pre><code>sudo mlxconfig -d /dev/mst/mt4119_pciconf0 q
+</code></pre>
+
+<p>Find the number of Virtual Functions that were created and make sure the SRIOV environment has been enabled:</p>
+<pre><code>sudo mlxconfig -d /dev/mst/mt4119_pciconf0 q | grep &quot;NUM_OF_VFS&quot;
+sudo mlxconfig -d /dev/mst/mt4119_pciconf0 q | grep &quot;SRIOV_EN&quot;
+</code></pre>
+
+<h3 id="testing_containers_on_nodes_or_containers">Testing Containers on Nodes or Containers<a class="headerlink" href="#testing_containers_on_nodes_or_containers" title="Permanent link">&para;</a></h3>
+<p>If you want to run this on a container, go to the node that the pod is running on and run <code>docker ps</code>, find the Container ID of the pod you launched (NOT the pause container) and run <code>docker exec -it &lt;container_id&gt; /bin/bash</code>. After that complete the instructions below.</p>
+<p>After you are inside a container or on a system that has a mellanox card running the the following:</p>
+<pre><code>ifconfig -a
+</code></pre>
+
+<p>This will list all the interfaces available.</p>
+<p>Then run:</p>
+<pre><code>ibdev2netdev
+</code></pre>
+
+<p>This will give you a list of adapters that you will need in order to connect them to interfaces on the actual system.</p>
+<p>One container will be the server and the other will be the client:
+ - Server: <code>ib_send_bw -d &lt;rdma_adapter_name&gt; -i 1 -F --report_gbits --run_infinitely</code>
+   - <rdma_adapter_name> is taken from running "ibdev2netdev -v"
+     - ex: mlx5_2
+   - Command Ex: <code>ib_send_bw -d mlx5_2 -i 1 -F --report_gbits --run_infinitely</code>
+ - Client: <code>ib_send_bw -d &lt;rdma_adapter_name&gt; -i 1 -F --report_gbits &lt;server_ip&gt; --run_infinitely</code>
+   - <server_ip> is the IP of the pod that the 'server' testing command was run on
+   - Command Ex: <code>ib_send_bw -d mlx5_5 -i 1 -F --report_gbits 10.55.206.84 --run_infinitely</code></p>
+<h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
+<p>Common errors</p>
+<h3 id="kubernetes_failing_to_startup">Kubernetes Failing to startup<a class="headerlink" href="#kubernetes_failing_to_startup" title="Permanent link">&para;</a></h3>
+<p>If you receive something similar to the following error:</p>
+<pre><code>The connection to the server 129.21.34.14:6443 was refused - did you specify the right host or port?
+</code></pre>
+
+<p>Most likely it is because the process <code>kubelet</code> failed to start. For some reason it requires the swap space to be off.
+Run the following command to turn it up and after it the kubelet process should start running.</p>
+<pre><code>swapoff -a
+</code></pre>
+
+<h3 id="unable_to_open_file_descriptor">Unable to Open File Descriptor<a class="headerlink" href="#unable_to_open_file_descriptor" title="Permanent link">&para;</a></h3>
+<p>This has something to do with how the VFs are allocated and changed (AKA we are not entirely sure, but you should follow this guide or it will fail to latch to sockets). Here is the example error:</p>
+<pre><code>Couldn't connect to 10.55.206.82:18515
+Unable to open file descriptor for socket connection Unable to init the socket connection
+</code></pre>
+
+<p>To remdy this error as well as correctly change number of VFs do the following.</p>
+<p>On Skya (the kubelet master) run:</p>
+<pre><code>kubectl delete pod &lt;pods&gt;
+</code></pre>
+
+<h2 id="repositories_and_guides">Repositories and Guides<a class="headerlink" href="#repositories_and_guides" title="Permanent link">&para;</a></h2>
+<p>Lots of information of repos and information that is helpful:</p>
+<h3 id="mellanox_rate_limiting">Mellanox Rate Limiting<a class="headerlink" href="#mellanox_rate_limiting" title="Permanent link">&para;</a></h3>
+<p>The commands are taken from https://community.mellanox.com/s/article/kubernetes-ipoib-ethernet-rdma-sr-iov-networking-with-connectx4-connectx5
+<em>NOTE</em> throughout the notes mt4119_pciconf0 is used, in reality run <code>ls /dev/mst/&lt;name&gt;</code> to find the name of your device</p>
+<ul>
+<li>"how to configure rate limit per VF": <a href="https://community.mellanox.com/s/article/howto-configure-rate-limit-per-vf-for-connectx-4-connectx-5">https://community.mellanox.com/s/article/howto-configure-rate-limit-per-vf-for-connectx-4-connectx-5</a></li>
+<li>"how to set virtual network attributes on a VF": <a href="https://community.mellanox.com/s/article/howto-set-virtual-network-attributes-on-a-virtual-function--sr-iov-x">https://community.mellanox.com/s/article/howto-set-virtual-network-attributes-on-a-virtual-function--sr-iov-x</a></li>
+</ul>
+<h3 id="repos">Repos<a class="headerlink" href="#repos" title="Permanent link">&para;</a></h3>
+<h4 id="mellanox">Mellanox<a class="headerlink" href="#mellanox" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Physical: <a href="https://github.com/Mellanox/k8s-rdma-sriov-dev-plugin">https://github.com/Mellanox/k8s-rdma-sriov-dev-plugin</a></li>
+<li>HCA-only: <a href="https://community.mellanox.com/s/article/kubernetes-rdma--infiniband--shared-hca-with-connectx4-connectx5">https://community.mellanox.com/s/article/kubernetes-rdma--infiniband--shared-hca-with-connectx4-connectx5</a></li>
+<li>SR-IOV: <a href="https://github.com/Mellanox/sriov-cni">https://github.com/Mellanox/sriov-cni</a><ul>
+<li>Info: <a href="https://blog.scottlowe.org/2009/12/02/what-is-sr-iov/">https://blog.scottlowe.org/2009/12/02/what-is-sr-iov/</a></li>
+</ul>
+</li>
+<li>DockerFiles: <a href="https://github.com/Mellanox/mofed_dockerfiles">https://github.com/Mellanox/mofed_dockerfiles</a></li>
+</ul>
+<h4 id="container_networking_interface">Container Networking Interface<a class="headerlink" href="#container_networking_interface" title="Permanent link">&para;</a></h4>
+<ul>
+<li><a href="https://github.com/containernetworking/cni">https://github.com/containernetworking/cni</a></li>
+<li>Specification:<ul>
+<li><a href="https://github.com/containernetworking/cni/blob/master/SPEC.md">https://github.com/containernetworking/cni/blob/master/SPEC.md</a></li>
+</ul>
+</li>
+</ul>
+<h4 id="linux_kernel">Linux Kernel:<a class="headerlink" href="#linux_kernel" title="Permanent link">&para;</a></h4>
+<ul>
+<li><a href="https://github.com/torvalds/linux">https://github.com/torvalds/linux</a><ul>
+<li><a href="https://github.com/torvalds/linux/tree/master/drivers/infiniband/core">https://github.com/torvalds/linux/tree/master/drivers/infiniband/core</a></li>
+<li><a href="https://github.com/torvalds/linux/tree/master/drivers/net/ethernet/mellanox/mlx5/core">https://github.com/torvalds/linux/tree/master/drivers/net/ethernet/mellanox/mlx5/core</a></li>
+</ul>
+</li>
+</ul>
+<h3 id="rdma_related_information">RDMA Related Information:<a class="headerlink" href="#rdma_related_information" title="Permanent link">&para;</a></h3>
+<ul>
+<li>"Hello World" type example:<ul>
+<li><a href="https://github.com/wangchenghku/rdma_handout">https://github.com/wangchenghku/rdma_handout</a></li>
+</ul>
+</li>
+<li>PerfTest (ib_send_bw, etc.):<ul>
+<li><a href="https://github.com/linux-rdma/perftest/tree/master/src">https://github.com/linux-rdma/perftest/tree/master/src</a></li>
+</ul>
+</li>
+<li>Information on the basics of writing an application that uses RDMA:<ul>
+<li><a href="https://opensourceforu.com/2016/09/fundamentals-of-rdma-programming/">https://opensourceforu.com/2016/09/fundamentals-of-rdma-programming/</a></li>
+</ul>
+</li>
+<li>RDMA Verbs specification:<ul>
+<li><a href="http://www.rdmaconsortium.org/home/draft-hilland-iwarp-verbs-v1.0-RDMAC.pdf">http://www.rdmaconsortium.org/home/draft-hilland-iwarp-verbs-v1.0-RDMAC.pdf</a></li>
+</ul>
+</li>
+<li>"RDMA Core":<ul>
+<li>Mellanox:<ul>
+<li><a href="https://github.com/Mellanox/rdma-core">https://github.com/Mellanox/rdma-core</a></li>
+</ul>
+</li>
+<li>"linux-rdma":<ul>
+<li><a href="https://github.com/linux-rdma/rdma-core">https://github.com/linux-rdma/rdma-core</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Manuals:<ul>
+<li>Ubuntu Driver Install: <a href="http://www.mellanox.com/related-docs/prod_software/Ubuntu_16_10_Inbox_Driver_User_Manual.pdf">http://www.mellanox.com/related-docs/prod_software/Ubuntu_16_10_Inbox_Driver_User_Manual.pdf</a></li>
+<li>RDMA Programming Manuals: <a href="http://www.mellanox.com/related-docs/prod_software/RDMA_Aware_Programming_user_manual.pdf">http://www.mellanox.com/related-docs/prod_software/RDMA_Aware_Programming_user_manual.pdf</a></li>
+<li>MLNX OFED Manual: <a href="https://docs.mellanox.com/display/MLNXOFEDv451010/MLNX_OFED+v4.5-1.0.1.0+Documentation">https://docs.mellanox.com/display/MLNXOFEDv451010/MLNX_OFED+v4.5-1.0.1.0+Documentation</a></li>
+</ul>
+</li>
+<li>Info: <a href="http://www.rdmamojo.com/2014/03/31/remote-direct-memory-access-rdma/">http://www.rdmamojo.com/2014/03/31/remote-direct-memory-access-rdma/</a></li>
+<li>Other:<ul>
+<li>HustCat CNI RDMA device Plugin: <a href="https://docs.google.com/document/d/1PPOYOdTstnG8-XEHgoCkHEOw5VUOt1blAQNu3MnXuY8/edit">https://docs.google.com/document/d/1PPOYOdTstnG8-XEHgoCkHEOw5VUOt1blAQNu3MnXuY8/edit</a></li>
+<li>Mellanox Presentation about RDMA: <a href="https://events.static.linuxfound.org/sites/events/files/slides/containing_rdma_final.pdf">https://events.static.linuxfound.org/sites/events/files/slides/containing_rdma_final.pdf</a></li>
+<li>Mellanox Qos Description: Traffic Classes: <a href="https://community.mellanox.com/s/article/network-considerations-for-global-pause--pfc-and-qos-with-mellanox-switches-and-adapters">https://community.mellanox.com/s/article/network-considerations-for-global-pause--pfc-and-qos-with-mellanox-switches-and-adapters</a></li>
+<li>Mellanox Recommended Configuration for deployment: <a href="https://community.mellanox.com/s/article/recommended-network-configuration-examples-for-roce-deployment">https://community.mellanox.com/s/article/recommended-network-configuration-examples-for-roce-deployment</a></li>
+<li>MOFED and OFED Explanation: <a href="https://www.rohitzambre.com/blog/2018/2/9/for-the-rdma-novice-libfabric-libibverbs-infiniband-ofed-mofed">https://www.rohitzambre.com/blog/2018/2/9/for-the-rdma-novice-libfabric-libibverbs-infiniband-ofed-mofed</a></li>
+<li>Mellanox QoS Infiniband Deployment: http://www.mellanox.com/pdf/whitepapers/deploying_qos_wp_10_19_2005.pdf</li>
+<li>Description of what an HCA is: <a href="https://www.ibm.com/support/knowledgecenter/TI0003M/p8ha1/smhostchanneladapter.htm">https://www.ibm.com/support/knowledgecenter/TI0003M/p8ha1/smhostchanneladapter.htm</a></li>
+<li>Mellanox Driver Description: <a href="https://community.mellanox.com/s/article/mellanox-linux-driver-modules-relationship--mlnx-ofed-x">https://community.mellanox.com/s/article/mellanox-linux-driver-modules-relationship--mlnx-ofed-x</a></li>
+<li>Mellanox RDMA-SRIOV Setup: <a href="https://community.mellanox.com/s/article/kubernetes-ipoib-ethernet-rdma-sr-iov-networking-with-connectx4-connectx5">https://community.mellanox.com/s/article/kubernetes-ipoib-ethernet-rdma-sr-iov-networking-with-connectx4-connectx5</a></li>
+<li>Mellanox RDMA-HCA Setup: <a href="https://community.mellanox.com/s/article/kubernetes-rdma--infiniband--shared-hca-with-connectx4-connectx5">https://community.mellanox.com/s/article/kubernetes-rdma--infiniband--shared-hca-with-connectx4-connectx5</a></li>
+</ul>
+</li>
+</ul>
               
             </div>
           </div>

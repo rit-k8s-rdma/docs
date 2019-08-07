@@ -26,3 +26,24 @@ There are a couple limitations when it comes to our solution:
 - More Vendors - making the solution more interface driven so it can be adapted to more vendors then just Mellanox.
 - Migrating CNI - the CNI is currently at an older version and we had to bootstrap the newer one, it should be upgraded.
 - Scheduling - opening up the scheduler to be more adaptable to customizable scheduling algorithms.
+
+#### Our Approach in Short
+Problems Addressed:
+ - VF's are specified per container
+ - Network plugin only ever gives one vf per pod, this means that the device plugin which tracks the amount of available VF's does not maintain an accurate count of VF's being used
+ - The VF's selected by Kuberentes to be allocated, may not match those actually allocated by the network plugin
+
+Solution:
+ - Device Plugin (RDMA)
+   - Changes to a DameonSet 
+   - Stores the current state of the nodes VF resources
+   - Can be quierried through an API
+ - Schedular extender
+   - Queries each DameonSet on each node and then filters the possible nodes that a pod can be deployed on based on resource requirements in the annotations for the pod
+ - Network Plugin (SRIOV)
+   - Modify it to handle read pods meta-data
+     - Read the amount of VF's
+     - Read the bandwidth limitation on each VF
+   - Modify plugin to set the bandwidth limits from read metadata
+   - Add ability to set `min_tx_rate` and `max_tx_rate`
+      

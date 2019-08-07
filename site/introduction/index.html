@@ -146,6 +146,24 @@
 <li>Migrating CNI - the CNI is currently at an older version and we had to bootstrap the newer one, it should be upgraded.</li>
 <li>Scheduling - opening up the scheduler to be more adaptable to customizable scheduling algorithms.</li>
 </ul>
+<h4 id="our_approach_in_short">Our Approach in Short<a class="headerlink" href="#our_approach_in_short" title="Permanent link">&para;</a></h4>
+<p>Problems Addressed:
+ - VF's are specified per container
+ - Network plugin only ever gives one vf per pod, this means that the device plugin which tracks the amount of available VF's does not maintain an accurate count of VF's being used
+ - The VF's selected by Kuberentes to be allocated, may not match those actually allocated by the network plugin</p>
+<p>Solution:
+ - Device Plugin (RDMA)
+   - Changes to a DameonSet 
+   - Stores the current state of the nodes VF resources
+   - Can be quierried through an API
+ - Schedular extender
+   - Queries each DameonSet on each node and then filters the possible nodes that a pod can be deployed on based on resource requirements in the annotations for the pod
+ - Network Plugin (SRIOV)
+   - Modify it to handle read pods meta-data
+     - Read the amount of VF's
+     - Read the bandwidth limitation on each VF
+   - Modify plugin to set the bandwidth limits from read metadata
+   - Add ability to set <code>min_tx_rate</code> and <code>max_tx_rate</code></p>
               
             </div>
           </div>
