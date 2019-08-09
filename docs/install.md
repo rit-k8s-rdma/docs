@@ -140,7 +140,7 @@ This section covers the installation of the RDMA Hardware Daemon Set onto all of
 
 	Applying this Daemon Set configuration on the Kubernetes cluster will cause each worker node to pull container images built as part of this project from our [Docker Hub repository](https://hub.docker.com/u/ritk8srdma).
 
-If you would like to build this Docker image yourself, the instructions are available within the [RDMA Hardware Daemon Set repository](https://github.com/rit-k8s-rdma/rit-k8s-rdma-ds).
+	If you would like to build this Docker image yourself, the instructions are available within the [RDMA Hardware Daemon Set repository](https://github.com/rit-k8s-rdma/rit-k8s-rdma-ds).
 
 2. Verify that the RDMA Hardware Daemon Set is running on each worker node in the cluster.
 
@@ -149,6 +149,51 @@ If you would like to build this Docker image yourself, the instructions are avai
         kubectl get pods -o wide --namespace kube-system
 
 	Within the output for this command, you should see several lines with the name: `rdma-ds-*` (one for each worker node in the cluster). The `status` column of each of these pods will show `Init:0/1` while the pod is performing hardware enumeration and initialization of the SR-IOV enabled RDMA hardware. One this has completed (it may take several minutes if there are a large number of virtual functions configured on a host), the status of the pods should switch to `Running`.
+
+3. Verify that the RDMA Hardware Daemon Set's REST endpoint is running.
+
+	Once the status of each hardware daemon set pod, as inspected in the previous step, is `Running`, the REST endpoint should be available to query. During the normal operation of the system, this would be done by the scheduler extension during the scheduling of a new pod. However, we can perform this process manually using 'curl' or a web browser.
+
+	First, determine the IP address or hostname of the worker node whose RDMA Hardware Daemon Set you would like to test. Then, in a web browser, navigate to:
+
+        http://<IP_OR_HOSTNAME>:54005/getpfs
+
+	Where <IP_OR_HOSTNAME\> is the IP or hostname of the worker node whose daemon set you would like to test, and 54005 is the port that daemon set is listening on (54005 is the default value at the time of writing).
+
+	You should see output that resembles the following:
+
+        [
+            {
+                "name":"enp4s0f0",
+                "used_tx_rate":0,
+                "capacity_tx_rate":100000,
+                "used_vfs":0,
+                "capacity_vfs":120,
+                "vfs":[
+                    {"vf":0, "mac":"7a:90:db:7b:30:ac", "vlan":0, "qos":0, "vlan_proto": "N/A", "spoof_check":"OFF", "trust":"ON", "link_state":"Follow", "min_tx_rate":0, "max_tx_rate":0, "vgt_plus":"OFF", "rate_group":0, "allocated":false},
+                    {"vf":1, "mac":"c6:26:fe:e2:4e:95", "vlan":0, "qos":0, "vlan_proto":"N/A", "spoof_check":"OFF", "trust":"ON", "link_state":"Follow", "min_tx_rate":0, "max_tx_rate":0, "vgt_plus":"OFF", "rate_group":0, "allocated":false},
+                    ...
+                ]
+            },
+            {
+                "name":"enp4s0f1",
+                "used_tx_rate":0,
+                "capacity_tx_rate":100000,
+                "used_vfs":0,
+                "capacity_vfs":120,
+                "vfs":[
+                    {"vf":0, "mac":"02:b9:9a:99:9e:ac", "vlan":0, "qos":0, "vlan_proto":"N/A", "spoof_check":"OFF", "trust":"ON", "link_state":"Follow", "min_tx_rate":0, "max_tx_rate":0, "vgt_plus":"OFF", "rate_group":0, "allocated":false},
+                    {"vf":1, "mac":"ea:99:de:00:e8:8b", "vlan":0,"qos":0, "vlan_proto":"N/A", "spoof_check":"OFF", "trust":"ON", "link_state":"Follow", "min_tx_rate":0, "max_tx_rate":0, "vgt_plus":"OFF", "rate_group":0, "allocated":false},
+                    ...
+                ]
+            },
+            ...
+        ]
+
+	If the RDMA Hardware Daemon Set endpoint responds, and the hardware information presented in the list it returns accurately reflects the state and details of the RDMA hardware on its node, then it is working correctly.
+
+	Respeat this process for every node in the cluster to verify that each instance of the daemon set is working correctly.
+
 
 ## Scheduler Extension
 
@@ -345,25 +390,105 @@ An example of a complete pod configuration file is available from our [common re
 
 ## Testing and Verification
 
+In order to verify that the system is working correctly, we can perform several tests. These tests will involve performing actions that exercise some components of the system, then performing checks to ensure those components functioned correctly.
+
 ### Deploy a Pod
-	-deploy pod
-	-kubectl get pods
-	-if status != running:
-		-kubectl describe pod
-			-possible errors:
-				-scheduler extension not running/found
-					-see logs for kube-scheduler & scheduler extension itself
-				-pod's rdma_interfaces_required JSON is malformatted
-					-fix it
-				-nodes in cluster did not respond to scheduler extension's requests
-					-see scheduler extension's logs
-					-make sure scheduler extension is contacting DaemonSet on same port daemonset is listening
-					-use web browser/curl to make sure daemonset is working
-				-nodes in cluster did not have enough free bandwidth
-					-check response from daemonset using curl/browser
-					-check how much bandwidth/how many interfaces the pod is requesting
+
+In this test, we deploy a single pod within the cluster to ensure that basic connectivity exists between the scheduler extension, dummy device plugin, and CNI plugin.
+
+1. Create a YAML file describing a pod to be deployed. Outfit this YAML file with the annotations mentioned in the 'Pod YAML Changes' section.
+
+2. Request that Kubernetes deploy the pod onto the cluster. Running this command will indicate to Kubernetes that you would like to run the pod on one of the worker nodes in the cluster.
+
+        kubectl create -f <pod_yaml_filename>
+
+3. View the status of the pod. Running this command will inform you where in the deployment process the pod is currently.
+
+        kubectl get pods -o wide
+
+	Find the entry in the list that matches the name of the pod in your YAML file from step 1. You want the pod's status to be `Running`, though it may take several seconds to reach this state even when everything is working correctly, depending on the size of your cluster and the pod's resource requirements.
+
+	If the pod does not reach the `Running` state after waiting for a while, you will need to perform some troubleshooting. First, observe more detailed information about the status of the pod by running:
+
+        kubectl describe pod <POD_NAME>
+
+	Where <POD_NAME\> is the name of the pod in your YAML file from step 1. Included in the information retrieved by this command is a the annotations used to request RDMA interface(s) for the pod, as well as the state of each container within the pod. When containers have a status other than `Running`, they will include a reason, such as `ErrImagePull`, which means the Docker image used to create the container couldn't be found on the node the pod was deployed on, or on Docker Hub. Also included in the output from this command is a list of 'Events' that have occured for the pod. If this events log contains a message like:
+
+        Post http://127.0.0.1:8888/scheduler/rdma_scheduling: dial tcp 127.0.0.1:8888: connect: connection refused
+
+	Then the scheduler extension could not be contacted by the core Kubernetes scheduler. Make sure the scheduler is running, and is configured to listen on the port the scheduler extension is trying to reach.
+
+	Alternatively, if a message like the following appears in the event log:
+
+        <N> RDMA Scheduler Extension: Unable to collect information on available RDMA resources for node.
+
+	Then the scheduler extension experienced a timeout or a failed connection when attempting to contact the RDMA Hardware Daemon Set instanced on <N\> of the nodes in the cluster. If this occurs, repeat the verification steps from the RDMA Hardware Daemon Set installation section. If this works, then verify that the port and URL being requested from within the scheduler extension match those that the daemon set is listening on. It may be helpful to look at the scheduler extension logs in this case.
+
+	Another possible message is the following:
+
+        <N> RDMA Scheduler Extension: Node did not have enough free RDMA resources.
+
+	Which means that the scheduler extension received information that indicated the available RDMA VFs/bandwidth on <N\> of the nodes in the cluster was not enough to satisfy the pod's requirements. If this seems incorrect, repeat step 3 of the RDMA Hardware Daemon Set install section, and inspect the amount of PFs, Bandwidth, and VFs available are correct for the node (and can satisfy what the pod is requesting).
+
+	Yet another message that may show up in the events log for a pod is the following:
+
+        <N> RDMA Scheduler Extension: 'rdma_interfaces_required' field in pod YAML file is malformatted.
+
+	This simply means that the value in the `rdma_interfaces_required` annotation for the pod is not a valid JSON string. Simply delete the pending pod, fix the error, and re-deploy. It may be helpful to look at the scheduler extension logs in this case as well.
+
+	An error like:
+
+        <N> Insufficient rdma-sriov/dev-infiniband-mount.
+
+	Comes from not having the dummy device plugin installed and configured correctly. View the status of its pods with `kubectl get pods -o wide --namespace kube-system`, and view the log files of each instance by executing `docker logs` on the right container on each worker node.
+
+	Finally, a few other errors specific to our system may come from the CNI plugin. These will be marked as such, but are also unexpected if the CNI plugin is installed at all. In order to view the logs for a specific instance of our CNI plugin that appears to have an issue, search the relevant node's system log for messages that begin with `RIT-CNI`.
 
 ### Test connectivity between two pods
 
-	-have two pods w/ node selectors and run ib_send_bw between them
+In order to ensure that the system has correctly provisioned pods with RDMA interfaces and set the correct bandwidth limits on those interfaces, we can run two pods on separate nodes in the Kubernetes cluster, then perform a bandwidth test between them.
+
+1. Create two pod YAML files with the necessary information to request at least one RDMA interface. Add node selectors for this test to ensure that the two pods are deployed to two different nodes within the cluster (naturally, the nodes chosen should have enough RDMA resources available to satisfy the rquirements of the pods, the scheduler extension will prevent the pods from being deployed otherwise). Also, ensure the container images used for these pods contain the 'ib_send_bw' RDMA testing utility, as well as the necessary RDMA libraries.
+
+2. Deploy the two pods onto their respective nodes in the cluster. Follow the instructions from the 'Deploy a Pod' section for troubleshooting.
+
+3. On the node to which the first pod has been deployed, find the Docker container running within that pod using `docker ps`. Execute a shell within that container by running:
+
+        docker exec -ti <CONTAINER_ID> /bin/bash
+
+	Where <CONTAINER_ID\> is the ID of the container that you found by running `docker ps`.
+
+4. While in a shell within that container, perform the following actions:
+
+	Get the pods IP address (use the IP for the eth0 interface):
+
+        ifconfig
+
+	Get the name of the RDMA adapter for the VF that was allocated to the pod's eth0 interface:
+
+        ibdev2netdev
+
+	Run the receiving (server) side of the bandwidth testing application:
+
+        ib_send_bw -d <RDMA_ADAPTER_NAME> -i 1 -F --report_gbits --run_infinitely
+
+	Where <RDMA_ADAPTER_NAME\> is the name of the form 'mlx5_N' which was connected to the interface whose IP address you found when running `ifconfig`.
+
+	This application is now waiting for an incoming connection. We will run the sending/client end of the test from a container within the other pod that we deployed onto another node in the cluster.
+
+5. On the node to which the second pod has been deployed, find a Docker container running within that pod and execute a shell within it (follow the same process as you did for the first pod).
+
+6. Within the shell running in the container from the second pod, perform the following actions:
+
+	Get the name of the RDMA adapter for the VF that was allocated to the pod's eth0 interface:
+
+        ibdev2netdev
+
+	Run the sending (client) side of the bandwidth testing application:
+
+        ib_send_bw -d <RDMA_ADAPTER_NAME> -i 1 -F --report_gbits <SERVER_IP> --run_infinitely
+
+	Where <RDMA_ADAPTER_NAME\> is the name of the form 'mlx5_N' which was connected to the eth0 interface, and <SERVER_IP\> is the IP address you found for the interface within the other (first) pod in step 4.
+
+	This command should display a table of bandwidth measurements that is updated periodically as it continues to run. The measurements displayed in the `BW average[Gb/sec]` column should all be at or below the bandwidth limit you set on the sending pod within its YAML file. If this is the case, then bandwidth limitation is working. A similar test can be run for bandwidth reservation, using additional pairs of pods that compete for bandwidth with the one that has the reservation.
 
