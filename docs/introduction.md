@@ -1,49 +1,49 @@
 # Introduction
 
-The main focus of this project was to enable bandwidth limiting and allow for multiple interfaces to be specified for RDMA interfaces on a per pod basis. The current Mellanox Solution has a number of pitfalls such as an inaccurate state between the CNI and the Device Plugin. The Device Plugin is managed by Kubernetes, so Kubernets decides which interface to allocate to a given container. This is not reflected accurately in the CNI which may give it a different interface. In the current solution a pod may have 3 containers that each request a single RDMA interface; in the solution the Device Plugin removes 3 RDMA interfaces from the available pool of interfaces, but the CNI only allocates a single interface; the state of the CNI and the Device Plugin are incorrect. One of the largest problems is that Mellanox treats RDMA interfaces as a container specified resource, when in reality network namespaces are shared across pods, so any container in a pod has access to all of the same interfaces. This becomes a problem because when specifying Device Resources within a pod yaml, they are on a per container basis. For all of the reasons above the Device Plugin approach was abandoned because it could not accommodate our goals and instead we opted for a new architecture.
+The primary focus of this project was to provide a set of Kubernetes plugins and extensions that would provide the ability to use RDMA interfaces from within Kubernetes containers while also supporting the ability to specify a bandwidth limit or reservation on those containers. Our system builds off of an existing solution from Mellanox Technologies, and seeks to overcome many of the pitfalls and limitations present within that solution. Specifically, our system addresses the lack of synchronization exists between the RDMA Device Plugin and CNI plugin within the previous system, as well as the lack of ability to perform per-pod RDMA interface allocation, among other things.
+
+Our solution replaces the RDMA device plugin with a pair of components: a Kubernetes scheduler extension and an RDMA hardware daemon set. These components work together to allow decisions about which node to deploy pods onto to take available RDMA resources into account, without limiting the amount of detail supported in a pod's specification of its RDMA requirements (as the device plugin interface did for the existing solution).
 
 ## Architecture
 
-The main system architecture for our design can be seen below; the green color specifies our components for our design and the yellow color specify Kubernetes components:
+The main system architecture for our design can be seen below; the green color denotes components that were developed as part of this project, while the yellow color denotes that components are a part of Kubernetes itself:
 
 ![Screenshot](assets/architecture.png)
 
-The main workflow for how a pod would deployed in our system begins with a request for deploying a pod going to the master nodes Kubernetes Control Process. After that request is seen the Kubernetes Scheduler creates a list of possible nodes that the pod can be placed on based on requirements of the pods yaml. This list then gets sent to our [Scheduler Extension](components.md#scheduler_extension), which is in charge of deciding which nodes can support the RDMA requirements specified in the pods yaml.
+The main workflow for how a pod would be deployed in our system begins with a request to deploy a pod being sent to the Kubernetes API Server process on the master node of the cluster. As this request is processed by Kubernetes, the Kubernetes scheduler will generate a list of possible nodes that the pod could be placed on, based on some of the requirements of the pods YAML file (excluding RDMA requirements - those will be handled by our scheduler extension) . This list then gets sent to our [Scheduler Extension](components.md#scheduler_extension), which is in charge of deciding which nodes can support the RDMA requirements specified in the pods yaml.
 
-The [Scheduler Extension](components.md#scheduler_extension) contacts each nodes [RDMA Hardware Daemon Set](components.md#rdma_hardware_daemon_set), which returns a JSON formatted list of information about a nodes RDMA VF's back to the [Scheduler Extension](components.md#scheduler_extension). The [Scheduler Extension](components.md#scheduler_extension) than processes all of the information to find a valid node that can meet the minimum bandwidth requirements of each of the requested interfaces that is specified in the pods yaml; the list of nodes whether blank or empty is sent back to the Kubernetes Core Scheduler. If no node is valid after the scheduling calls an error is raised and the pod is not placed, this error can be seen with a Kubernetes describe command of why the pod was not placed.
+The [Scheduler Extension](components.md#scheduler_extension) contacts each nodes [RDMA Hardware Daemon Set](components.md#rdma_hardware_daemon_set), which return JSON formatted lists of information about their node's RDMA VFs. The [Scheduler Extension](components.md#scheduler_extension) then processes all of the information to determine which nodes can meet the minimum bandwidth requirements of the pod being scheduled. The nodes that can support the pod are added to a list that is sent back to the core Kubernetes scheduler, which makes a final selection from among the nodes in the filtered list. In cases where this list is empty, the pod will remain in the `Pending` state, and Kubernetes will periodically re-attempt to schedule it.
 
-Assuming that the pod was able to placed on at least one valid node, the Kubelet process on the valid node gets called to setup the pod. During the pods setup process the (CNI)[components.md#cni] is called to setup the network of the pod. The (CNI)[components.md#cni] first contacts the [RDMA Hardware Daemon Set](components.md#rdma_hardware_daemon_set) on the node that is running to get an up to date list of the state of the node. It then runs the same algorithm that the [Scheduler Extension](components.md#scheduler_extension) had run to find the correct placements of interfaces to meet the requirements of the bandwidth limitations. The (CNI)[components.md#cni] is atomic operation, so it either completes the setup of the pod or fails and rollbacks all changes made to any interfaces. Once the (CNI)[components.md#cni] finishes, the response is sent back to the Kubelet process of the node.
+Assuming that the pod was able to scheduled successfully, the Kubelet process on the node it was scheduled to gets called to setup the pod and its containers. During the pods setup process the [CNI Plugin](components.md#cni) is called to configure and attach the RDMA interfaces to the pod. The [CNI Plugin](components.md#cni) first contacts the [RDMA Hardware Daemon Set](components.md#rdma_hardware_daemon_set) on the node that is running to get an up to date list of the state of the node. It then runs the same algorithm that the [Scheduler Extension](components.md#scheduler_extension) had executed previously to determine if a pod's requirements could be satisfied. When used by the CNI plugin, this alogrithm is instead used to determine which RDMA virtual functions to attach to the pod. The [CNI Plugin](components.md#cni) runs atomically within the node it is installed on, meaning no two instances of our RDMA CNI plugin will execute concurrently on the same node. This means that two pods being deployed at the same time will not result in any race conditions in RDMA VF allocation. Once the [CNI Plugin](components.md#cni) completes its work, a response containing the IP addresses allocated to the pod is sent back to the Kubelet process on the same node.
 
 ## Limitations
 
-There are a couple limitations when it comes to our solution:
-- Mellanox Vendor - the following has only been test on a Mellanox Card
-- Data Plane Development Kit (DPDK) - the Mellanox solution may work with DPDK, it has not been tested with our solution (changes to (CNI)[https://github.com/rit-k8s-rdma/rit-k8s-rdma-sriov-cni] required)
-- Shared RDMA Device - the Mellanox solution may work with a shared RDMA interface, it has not been tested with our solution (changes to (CNI)[https://github.com/rit-k8s-rdma/rit-k8s-rdma-sriov-cni] required)
-- Dummy Device Plugin - the current solution requires the use of Device Plugin to give access to `/dev/infiniband` for open issues in Kubernets that can be found [here](https://github.com/kubernetes/kubernetes/issues/5607) and [here](https://github.com/kubernetes/kubernetes/issues/60748). The main problem is Kubernetes does not have the ideas of a `device` directory that [Docker has `--device`](https://docs.docker.com/engine/reference/commandline/run/).
+There are a few limitations to keep in mind when using this system:
+
+- Mellanox-centric implementation - The system has not been tested with RDMA hardware from other vendors. While the core design and implementation of each component should not be affected by this, minor adjustments to the CNI Plugin and RDMA Hardware DaemonSet many be necessary to support other vendor's hardware.
+- Data Plane Development Kit (DPDK) - The CNI plugin from the existing Mellanox RDMA-in-Kubernetes solution also had support for DPDK. Our forked version of the CNI plugin does not provide the same support (though it may be easy to do so, we have not looked into this)
+- Dummy Device Plugin - the current solution requires the use of Device Plugin to allow containerized applications to have privileged access to the `/dev/infiniband` directory. Ideally, this would be possible without the need for an entire device plugin, but discussion on how to do so in Kubernetes is ongoing (See github issues like [this one](https://github.com/kubernetes/kubernetes/issues/5607) and [this one](https://github.com/kubernetes/kubernetes/issues/60748)). To summarize the issue: Docker supports privileged access by a container to a specific directory for the purpose of accessing a hardware device (this is called a "device directory"), but this support is not (yet) exposed by Kubernetes.
 
 ## Future Work
-- More Vendors - making the solution more interface driven so it can be adapted to more vendors then just Mellanox.
-- Migrating CNI - the CNI is currently at an older version and we had to bootstrap the newer one, it should be upgraded.
-- Scheduling - opening up the scheduler to be more adaptable to customizable scheduling algorithms.
+- More Vendors - Adding support for RDMA hardware from a wider variety of vendors.
+- Migrating CNI - The CNI Plugin currently operates on an older version of the CNI standard, and reformats its responses to fit the newer version. This could be avoided by upgrading the whole plugin to the newer version.
+- Scheduling - Implementing more complex algorithms for selecting which node in the cluster a pod gets placed on based on RDMA resources. Similarly, choosing which RDMA VFs are given to which pods by the CNI plugin to achieve the best bandwidth utilization.
 
 #### Our Approach in Short
-Problems Addressed:
- - VF's are specified per container
- - Network plugin only ever gives one vf per pod, this means that the device plugin which tracks the amount of available VF's does not maintain an accurate count of VF's being used
- - The VF's selected by Kuberentes to be allocated, may not match those actually allocated by the network plugin
+Problems with Existing Solution:
 
-Solution:
- - Device Plugin (RDMA)
-   - Changes to a DameonSet 
-   - Stores the current state of the nodes VF resources
-   - Can be quierried through an API
- - Schedular extender
-   - Queries each DameonSet on each node and then filters the possible nodes that a pod can be deployed on based on resource requirements in the annotations for the pod
- - Network Plugin (SRIOV)
+ - VFs are specified per container.
+ - Network plugin only ever gives one VF per pod, this means that the device plugin which tracks the amount of available VFs does not maintain an accurate count of VFs being used.
+ - The VFs selected by Kuberentes to be allocated, may not match those actually allocated by the CNI plugin.
+
+Our Solution:
+
+ - Replace RDMA Device Plugin with scheduler extension/RDMA hardware daemon set pairing.
+ - Schedular extender queries the RDMA hardware dameon set pod on each node for information about that node's RDMA resources, then filters the list of possible nodes to deploy a pod onto based on resource requirements in the annotations for the pod.
+ - CNI Plugin
    - Modify it to handle read pods meta-data
-     - Read the amount of VF's
+     - Read the amount of VFs
      - Read the bandwidth limitation on each VF
    - Modify plugin to set the bandwidth limits from read metadata
-   - Add ability to set `min_tx_rate` and `max_tx_rate`
+   - Add ability to allocate multiple RDMA interfaces per pod and no RDMA interfaces (for pods that don't request any).
       
